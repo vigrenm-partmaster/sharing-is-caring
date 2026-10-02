@@ -13,7 +13,9 @@
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;padding:12px 16px;gap:10px}
 header,.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-h1{font-size:16px;margin:0 auto 0 0}
+h1{font-size:16px;margin:0 8px 0 0}
+.div{width:1px;align-self:stretch;background:var(--bd);margin:0 4px}
+#status{margin-left:auto}
 button,select,input{font:inherit;color:var(--fg);background:var(--pn);border:1px solid var(--bd);border-radius:6px;padding:6px 10px}
 button{cursor:pointer}button:hover{border-color:var(--ac)}
 button.pri{background:var(--ac);border-color:var(--ac);color:#fff}
@@ -43,6 +45,10 @@ white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;overflow:auto;width:100%;
 <body>
 <header>
   <h1>Sharing is Caring</h1>
+  <input id="code" placeholder="Enter code to join" autocomplete="off" spellcheck="false">
+  <button id="join">Join</button>
+  <span class="div"></span>
+  <button id="new">New code</button>
   <span id="status"><span class="dot"></span>starting…</span>
   <select id="theme" title="Theme"><option value="light">White</option><option value="dark">Black</option></select>
 </header>
@@ -50,12 +56,7 @@ white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;overflow:auto;width:100%;
 <div class="bar">
   <button id="share" class="pri" title="Copy link to this page">Share link</button>
   <button id="snap" title="Link with the content inside the URL. Works even if this tab is closed">Snapshot link</button>
-  <button id="new">New code</button>
-  <input id="code" placeholder="Code, e.g. blue-fox-42" autocomplete="off" spellcheck="false">
-  <button id="join">Join</button>
-</div>
-
-<div class="bar">
+  <span class="div"></span>
   <select id="lang" title="Content type">
     <option value="txt">Text</option><option value="log">Error / stack trace</option><option value="json">JSON</option>
     <option value="js">JavaScript</option><option value="md">Markdown</option>
