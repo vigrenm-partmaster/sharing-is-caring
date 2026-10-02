@@ -17,7 +17,7 @@ h1{font-size:16px;margin:0 auto 0 0}
 button,select,input{font:inherit;color:var(--fg);background:var(--pn);border:1px solid var(--bd);border-radius:6px;padding:6px 10px}
 button{cursor:pointer}button:hover{border-color:var(--ac)}
 button.pri{background:var(--ac);border-color:var(--ac);color:#fff}
-input{width:150px}
+input{width:190px}
 #status{color:var(--mut);font-size:13px}
 #status b{color:var(--fg)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mut);margin-right:6px}
@@ -51,7 +51,7 @@ white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;overflow:auto;width:100%;
   <button id="share" class="pri" title="Copy link to this page">Share link</button>
   <button id="snap" title="Link with the content inside the URL. Works even if this tab is closed">Snapshot link</button>
   <button id="new">New code</button>
-  <input id="code" placeholder="Code or link" autocomplete="off" spellcheck="false">
+  <input id="code" placeholder="Code, e.g. blue-fox-42" autocomplete="off" spellcheck="false">
   <button id="join">Join</button>
 </div>
 
@@ -80,16 +80,18 @@ white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;overflow:auto;width:100%;
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
-const TTL=3600e3, PREFIX='sic-', ALPHA='abcdefghjkmnpqrstuvwxyz23456789';
+const TTL=3600e3, PREFIX='sic-';
+// short, easy-to-say, hard-to-misspell words so a code can be shouted across a room: "blue fox 42"
+const WORDS='red blue green pink gold gray black white tiger fox wolf bear lion seal duck frog crab owl bee ant cat dog pig cow horse moon star sun cloud rain snow wind fire ice rock sand tree leaf rose pine lake river hill road boat train plane car bike bell drum harp lamp door key cup box ball cake pie milk salt jam nut egg pen map hat'.split(' ');
 const ta=$('ta'),hl=$('hl'),md=$('md'),lang=$('lang');
 let peer=null,conns=[],code='',expires=0,isHost=false,timer=null,lastSent=null,previewing=false;
 
 // ---------- helpers ----------
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),1800)};
-const newCode=()=>Array.from(crypto.getRandomValues(new Uint8Array(6)),b=>ALPHA[b%ALPHA.length]).join('');
+const newCode=()=>{const r=crypto.getRandomValues(new Uint32Array(3));return WORDS[r[0]%WORDS.length]+'-'+WORDS[r[1]%WORDS.length]+'-'+(10+r[2]%90)};
 const pageUrl=c=>location.origin+location.pathname+'#'+c;
-const extractCode=s=>{s=s.trim();const m=s.match(/#([a-z0-9]{4,12})\s*$/i);return (m?m[1]:s).toLowerCase().replace(/[^a-z0-9]/g,'')};
+const extractCode=s=>{s=s.trim();const m=s.match(/#([\w-]+)\s*$/);return (m?m[1]:s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};
 function status(txt,cls){$('status').innerHTML='<span class="dot '+(cls||'')+'"></span>'+txt}
 async function copyText(t){try{await navigator.clipboard.writeText(t)}catch{const x=document.createElement('textarea');x.value=t;document.body.append(x);x.select();document.execCommand('copy');x.remove()}}
 
