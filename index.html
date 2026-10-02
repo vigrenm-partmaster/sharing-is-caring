@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sharing is Caring</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#6b7280;--bd:#d9dce1;--pn:#f6f7f9;--ac:#2563eb;--ok:#16a34a;--er:#dc2626;
+--k:#7c3aed;--s:#15803d;--n:#b45309;--c:#6b7280;--p:#0369a1}
+:root[data-theme=dark]{--bg:#0f1115;--fg:#e6e6e6;--mut:#8b93a1;--bd:#2b3038;--pn:#171a20;--ac:#60a5fa;--ok:#4ade80;--er:#f87171;
+--k:#c4b5fd;--s:#86efac;--n:#fbbf24;--c:#8b93a1;--p:#7dd3fc}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;padding:12px 16px;gap:10px}
+header,.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+h1{font-size:16px;margin:0 auto 0 0}
+button,select,input{font:inherit;color:var(--fg);background:var(--pn);border:1px solid var(--bd);border-radius:6px;padding:6px 10px}
+button{cursor:pointer}button:hover{border-color:var(--ac)}
+button.pri{background:var(--ac);border-color:var(--ac);color:#fff}
+input{width:150px}
+#status{color:var(--mut);font-size:13px}
+#status b{color:var(--fg)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mut);margin-right:6px}
+.dot.on{background:var(--ok)}.dot.err{background:var(--er)}
+.ed{position:relative;flex:1;min-height:240px;border:1px solid var(--bd);border-radius:8px;background:var(--pn);overflow:hidden}
+.ed pre,.ed textarea,#md{position:absolute;inset:0;margin:0;padding:12px;border:0;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;
+white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;overflow:auto;width:100%;height:100%}
+.ed pre{pointer-events:none;color:var(--fg)}
+.ed textarea{background:transparent;color:transparent;caret-color:var(--fg);resize:none;outline:0}
+.ed textarea::selection{background:color-mix(in srgb,var(--ac) 35%,transparent);color:transparent}
+.ed textarea::placeholder{color:var(--mut)}
+#md{background:var(--pn);font:14px/1.5 system-ui,sans-serif;white-space:normal;display:none}
+#md code,#md pre{background:var(--bg);padding:1px 4px;border-radius:4px;font-family:ui-monospace,monospace}
+#md pre{display:block;position:static;padding:8px;white-space:pre-wrap;pointer-events:auto}
+#md a{color:var(--ac)}
+.t-k{color:var(--k)}.t-s{color:var(--s)}.t-n{color:var(--n)}.t-c{color:var(--c);font-style:italic}.t-p{color:var(--p)}.t-e{color:var(--er);font-weight:600}
+#links{font-size:13px;display:flex;flex-wrap:wrap;gap:4px 12px}#links a{color:var(--ac)}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none}
+#toast.show{opacity:1}
+.hint{color:var(--mut);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sharing is Caring</h1>
+  <span id="status"><span class="dot"></span>starting…</span>
+  <select id="theme" title="Theme"><option value="light">White</option><option value="dark">Black</option></select>
+</header>
+
+<div class="bar">
+  <button id="share" class="pri" title="Copy link to this page">Share link</button>
+  <button id="snap" title="Link with the content inside the URL. Works even if this tab is closed">Snapshot link</button>
+  <button id="new">New code</button>
+  <input id="code" placeholder="Code or link" autocomplete="off" spellcheck="false">
+  <button id="join">Join</button>
+</div>
+
+<div class="bar">
+  <select id="lang" title="Content type">
+    <option value="txt">Text</option><option value="log">Error / stack trace</option><option value="json">JSON</option>
+    <option value="js">JavaScript</option><option value="md">Markdown</option>
+  </select>
+  <button id="fmt" title="Pretty-print JSON">Format JSON</button>
+  <button id="mdv" title="Toggle Markdown preview">Preview</button>
+  <button id="send" class="pri" title="Send my content to the other side (Ctrl+Enter)">Send ▶</button>
+  <button id="copy">Copy</button>
+  <button id="clear">Clear</button>
+  <span class="hint" id="exp"></span>
+</div>
+
+<div class="ed">
+  <pre id="hl" aria-hidden="true"></pre>
+  <textarea id="ta" spellcheck="false" placeholder="Paste an error, URL, JSON… then press Send. Whatever the other side sends shows up here."></textarea>
+  <div id="md"></div>
+</div>
+<div id="links"></div>
+<div id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const TTL=3600e3, PREFIX='sic-', ALPHA='abcdefghjkmnpqrstuvwxyz23456789';
+const ta=$('ta'),hl=$('hl'),md=$('md'),lang=$('lang');
+let peer=null,conns=[],code='',expires=0,isHost=false,timer=null,lastSent=null,previewing=false;
+
+// ---------- helpers ----------
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),1800)};
+const newCode=()=>Array.from(crypto.getRandomValues(new Uint8Array(6)),b=>ALPHA[b%ALPHA.length]).join('');
+const pageUrl=c=>location.origin+location.pathname+'#'+c;
+const extractCode=s=>{s=s.trim();const m=s.match(/#([a-z0-9]{4,12})\s*$/i);return (m?m[1]:s).toLowerCase().replace(/[^a-z0-9]/g,'')};
+function status(txt,cls){$('status').innerHTML='<span class="dot '+(cls||'')+'"></span>'+txt}
+async function copyText(t){try{await navigator.clipboard.writeText(t)}catch{const x=document.createElement('textarea');x.value=t;document.body.append(x);x.select();document.execCommand('copy');x.remove()}}
+
+// ---------- highlighting ----------
+const RX={
+ json:/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g,
+ js:/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\b(const|let|var|function|return|if|else|for|while|class|new|import|from|export|default|async|await|try|catch|throw|this|typeof|null|undefined|true|false)\b|\b(\d+\.?\d*)\b/g,
+ log:/(\b[\w.]*(?:Error|Exception|Fatal|FATAL|ERROR|WARN|Warning)\b)|(https?:\/\/[^\s)"']+)|((?:[\w./\\-]+\.\w+|<anonymous>):\d+(?::\d+)?)|(\b[1-5]\d\d\b(?= [A-Z]))|(^\s+at\s)/gm,
+ md:/(^```[^\n]*$)|(^#{1,6} .*$)|(\*\*[^*\n]+\*\*|`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))/gm
+};
+const CLS={json:['t-s','t-p','t-k','t-n'],js:['t-c','t-s','t-k','t-n'],log:['t-e','t-p','t-n','t-k','t-c'],md:['t-c','t-k','t-n','t-p']};
+function highlight(text,l){
+  if(l==='txt'||!RX[l]) return esc(text);
+  let out='',i=0,m;const rx=RX[l];rx.lastIndex=0;
+  while((m=rx.exec(text))){
+    if(m[0]==='') {rx.lastIndex++;continue}
+    out+=esc(text.slice(i,m.index));
+    let g=1;while(g<m.length&&m[g]===undefined)g++;
+    let c=CLS[l][g-1];
+    if(l==='json'&&g===1&&m[2]) c='t-p';          // key
+    else if(l==='json'&&g===1) c='t-s';
+    out+='<span class="'+c+'">'+esc(m[0])+'</span>';
+    i=m.index+m[0].length;
+  }
+  return out+esc(text.slice(i));
+}
+function renderMd(src){
+  const parts=src.split(/^```[^\n]*\n([\s\S]*?)^```/m);
+  return parts.map((p,i)=>i%2?'<pre>'+esc(p)+'</pre>':esc(p)
+    .replace(/^(#{1,6}) (.*)$/gm,(_,h,t)=>'<h'+h.length+'>'+t+'</h'+h.length+'>')
+    .replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>')
+    .replace(/\[([^\]\n]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/^\s*[-*] (.*)$/gm,'<li>$1</li>').replace(/\n/g,'<br>')).join('');
+}
+function refresh(){
+  hl.innerHTML=highlight(ta.value,lang.value)+'\n';
+  hl.scrollTop=ta.scrollTop;hl.scrollLeft=ta.scrollLeft;
+  const urls=[...new Set(ta.value.match(/https?:\/\/[^\s)"'<>]+/g)||[])].slice(0,12);
+  $('links').innerHTML=urls.length?'🔗 '+urls.map(u=>'<a target="_blank" rel="noopener" href="'+esc(u)+'">'+esc(u.length>60?u.slice(0,57)+'…':u)+'</a>').join(''):'';
+  if(previewing) md.innerHTML=renderMd(ta.value);
+}
+ta.addEventListener('input',refresh);
+ta.addEventListener('scroll',()=>{hl.scrollTop=ta.scrollTop;hl.scrollLeft=ta.scrollLeft});
+ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send()}});
+lang.addEventListener('change',()=>{refresh();if(lang.value!=='md')setPreview(false)});
+
+function setPreview(on){previewing=on&&lang.value==='md';md.style.display=previewing?'block':'none';$('mdv').textContent=previewing?'Edit':'Preview';if(previewing)md.innerHTML=renderMd(ta.value)}
+$('mdv').onclick=()=>{if(lang.value!=='md'){lang.value='md';refresh()}setPreview(!previewing)};
+$('fmt').onclick=()=>{try{ta.value=JSON.stringify(JSON.parse(ta.value),null,2);lang.value='json';refresh()}catch(e){toast('Not valid JSON: '+e.message.slice(0,60))}};
+$('copy').onclick=async()=>{await copyText(ta.value);toast('Content copied')};
+$('clear').onclick=()=>{ta.value='';refresh();ta.focus()};
+$('theme').onchange=e=>{document.documentElement.dataset.theme=e.target.value;try{localStorage.setItem('sic-theme',e.target.value)}catch{}};
+
+// ---------- peer-to-peer ----------
+function persist(){try{if(isHost)sessionStorage.setItem('sic-host',JSON.stringify({code,expires}))}catch{}}
+function updateStatus(){
+  const n=conns.filter(c=>c.open).length;
+  if(!peer||!code)return;
+  if(n) status('Code <b>'+code+'</b> · connected ('+n+')','on');
+  else status('Code <b>'+code+'</b> · '+(isHost?'waiting for the other side (keep this tab open)':'not connected'),isHost?'':'err');
+  $('exp').textContent=expires?'expires '+new Date(expires).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
+}
+function teardown(){
+  conns.forEach(c=>{try{c.close()}catch{}});conns=[];
+  if(peer){try{peer.destroy()}catch{}peer=null}
+  clearInterval(timer);
+}
+function startExpiryWatch(){
+  clearInterval(timer);
+  timer=setInterval(()=>{if(expires&&Date.now()>expires){teardown();ta.value='';refresh();code='';expires=0;
+    try{sessionStorage.removeItem('sic-host')}catch{};history.replaceState(null,'',location.pathname);
+    status('Expired after 1 hour. Content deleted','err');$('exp').textContent=''}},5000);
+}
+function onData(conn,d){
+  if(!d||d.type!=='content')return;
+  ta.value=d.text;lang.value=d.lang||'txt';refresh();setPreview(false);
+  toast('Received');
+  if(isHost)conns.forEach(c=>{if(c!==conn&&c.open)c.send(d)});   // relay to other guests
+}
+function wire(conn){
+  conns.push(conn);
+  conn.on('open',()=>{updateStatus();if(isHost&&lastSent)conn.send(lastSent);
+    else if(isHost&&ta.value)conn.send(pack())});
+  conn.on('data',d=>onData(conn,d));
+  conn.on('close',()=>{conns=conns.filter(c=>c!==conn);updateStatus()});
+  conn.on('error',()=>updateStatus());
+}
+const pack=()=>({type:'content',text:ta.value,lang:lang.value});
+function send(){
+  const open=conns.filter(c=>c.open);
+  if(!open.length){toast('Nobody connected yet. Use Share link, or Snapshot link');return}
+  lastSent=pack();open.forEach(c=>c.send(lastSent));toast('Sent ✓');
+}
+$('send').onclick=send;
+
+function host(c,exp){
+  teardown();isHost=true;code=c;expires=exp||Date.now()+TTL;
+  history.replaceState(null,'',pageUrl(code));
+  status('Connecting…');
+  peer=new Peer(PREFIX+code);
+  peer.on('open',()=>{persist();startExpiryWatch();updateStatus()});
+  peer.on('connection',wire);
+  peer.on('error',e=>{
+    if(e.type==='unavailable-id'){ // code taken: either another host, or stale registration
+      host(newCode());
+    } else status('Network error: '+e.type,'err');
+  });
+  peer.on('disconnected',()=>{try{peer.reconnect()}catch{}});
+}
+function guest(c){
+  teardown();isHost=false;code=c;expires=Date.now()+TTL;
+  history.replaceState(null,'',pageUrl(code));
+  status('Connecting to '+code+'…');
+  peer=new Peer();
+  peer.on('open',()=>{
+    const conn=peer.connect(PREFIX+code,{reliable:true});wire(conn);startExpiryWatch();
+    setTimeout(()=>{if(!conns.some(x=>x.open))status('No host found for <b>'+code+'</b>. Ask them to keep their tab open, or use a Snapshot link','err')},8000);
+  });
+  peer.on('error',e=>{status(e.type==='peer-unavailable'?'No host found for <b>'+code+'</b>. Is their tab still open?':'Network error: '+e.type,'err')});
+}
+function join(raw){const c=extractCode(raw);if(c.length<4){toast('Enter a code or link');return}
+  const mine=readHost();if(mine&&mine.code===c)host(c,mine.expires);else guest(c)}
+function readHost(){try{const h=JSON.parse(sessionStorage.getItem('sic-host')||'null');return h&&h.expires>Date.now()?h:null}catch{return null}}
+
+$('new').onclick=()=>{ta.value='';lastSent=null;refresh();host(newCode())};
+$('join').onclick=()=>join($('code').value);
+$('code').addEventListener('keydown',e=>{if(e.key==='Enter')join(e.target.value)});
+$('code').addEventListener('paste',()=>setTimeout(()=>{if($('code').value.length>6)join($('code').value)}));
+$('share').onclick=async()=>{if(!code){toast('No code yet');return}await copyText(pageUrl(code));toast('Link copied: '+code)};
+
+// ---------- snapshot links (content lives in the URL, nothing hosted) ----------
+const b64=u8=>btoa(String.fromCharCode(...u8)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const unb64=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+async function deflate(str){const s=new Blob([str]).stream().pipeThrough(new CompressionStream('deflate-raw'));return new Uint8Array(await new Response(s).arrayBuffer())}
+async function inflate(u8){const s=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));return await new Response(s).text()}
+$('snap').onclick=async()=>{
+  if(!ta.value){toast('Nothing to share');return}
+  if(!window.CompressionStream){toast('Snapshot needs a newer browser');return}
+  const data=b64(await deflate(ta.value));
+  const url=location.origin+location.pathname+'#s='+(Date.now()+TTL).toString(36)+'.'+lang.value+'.'+data;
+  await copyText(url);
+  toast(url.length>8000?'Copied, but long. Some chat apps may truncate it':'Snapshot link copied');
+};
+async function loadSnapshot(h){
+  const m=h.match(/^#s=([a-z0-9]+)\.(\w+)\.([\w-]+)$/);if(!m)return false;
+  if(parseInt(m[1],36)<Date.now()){status('This snapshot link has expired (1 hour)','err');history.replaceState(null,'',location.pathname);return true}
+  try{ta.value=await inflate(unb64(m[3]));lang.value=m[2];refresh();status('Snapshot loaded. Nothing is stored anywhere','on');expires=parseInt(m[1],36);$('exp').textContent='expires '+new Date(expires).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+  catch{status('Bad snapshot link','err')}
+  return true;
+}
+
+// ---------- init ----------
+try{const t=localStorage.getItem('sic-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.theme=t;$('theme').value=t}catch{}
+refresh();
+(async()=>{
+  const h=location.hash;
+  if(await loadSnapshot(h))return;
+  if(typeof Peer==='undefined'){status('Could not load the peer library (offline?)','err');return}
+  const c=h.length>1?extractCode(h):'';
+  if(c)join(c);
+  else{const mine=readHost();host(mine?mine.code:newCode(),mine&&mine.expires)}
+})();
+window.addEventListener('hashchange',()=>{const c=extractCode(location.hash);if(c&&c!==code)join(c)});
+})();
+</script>
+</body>
+</html>
