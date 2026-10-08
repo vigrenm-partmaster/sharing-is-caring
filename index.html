@@ -69,7 +69,7 @@ white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;overflow:auto;width:100%;
 <body>
 <header>
   <h1>Sharing is Caring</h1>
-  <input id="code" placeholder="Enter code to join" autocomplete="off" spellcheck="false">
+  <input id="code" placeholder="Enter code to join (e.g. gold-tree-57)" autocomplete="off" spellcheck="false">
   <button id="join">Join</button>
   <span class="div"></span>
   <button id="new">New code</button>
@@ -124,7 +124,9 @@ const ICE={config:{iceServers:[
  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
 ],sdpSemantics:'unified-plan'}};
 const pageUrl=c=>location.origin+location.pathname+'#'+c;
-const extractCode=s=>{s=s.trim();const m=s.match(/#([\w-]+)\s*$/);return (m?m[1]:s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};
+const extractCode=s=>{s=s.trim();const i=s.lastIndexOf('#');if(i>=0)s=s.slice(i+1);  // "#code", "url#code", or a pasted share message
+  const m=s.match(/([a-z]+)[\s_.-]+([a-z]+)[\s_.-]+(\d{2})(?!\d)/i);  // word-word-NN, separators optional/mixed ("gold tree 57")
+  return (m?m[1]+'-'+m[2]+'-'+m[3]:s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};
 function status(txt,cls){$('status').innerHTML='<span class="dot '+(cls||'')+'"></span>'+txt}
 async function copyText(t){try{await navigator.clipboard.writeText(t)}catch{const x=document.createElement('textarea');x.value=t;document.body.append(x);x.select();document.execCommand('copy');x.remove()}}
 
