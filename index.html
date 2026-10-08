@@ -117,6 +117,12 @@ let peer=null,conns=[],code='',expires=0,isHost=false,timer=null,lastSent=null,p
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),1800)};
 const newCode=()=>{const r=crypto.getRandomValues(new Uint32Array(3));return WORDS[r[0]%WORDS.length]+'-'+WORDS[r[1]%WORDS.length]+'-'+(10+r[2]%90)};
+// STUN + TURN relays (incl. TCP/TLS on 443) so cross-region / corporate-firewall peers can still connect
+const ICE={config:{iceServers:[
+ {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},
+ {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},
+ {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+],sdpSemantics:'unified-plan'}};
 const pageUrl=c=>location.origin+location.pathname+'#'+c;
 const extractCode=s=>{s=s.trim();const m=s.match(/#([\w-]+)\s*$/);return (m?m[1]:s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};
 function status(txt,cls){$('status').innerHTML='<span class="dot '+(cls||'')+'"></span>'+txt}
@@ -229,9 +235,9 @@ $('send').onclick=send;
 
 function host(c,exp){
   teardown();isHost=true;code=c;expires=exp||Date.now()+TTL;
-  history.replaceState(null,'',pageUrl(code));
+  history.replaceState(null,'',pageUrl(code));document.title='Sharing is Caring #'+code;
   status('Connecting…');
-  peer=new Peer(PREFIX+code);
+  peer=new Peer(PREFIX+code,ICE);
   peer.on('open',()=>{persist();startExpiryWatch();updateStatus()});
   peer.on('connection',wire);
   peer.on('error',e=>{
@@ -243,12 +249,12 @@ function host(c,exp){
 }
 function guest(c){
   teardown();isHost=false;code=c;expires=Date.now()+TTL;
-  history.replaceState(null,'',pageUrl(code));
+  history.replaceState(null,'',pageUrl(code));document.title='Sharing is Caring #'+code;
   status('Connecting to '+code+'…');
-  peer=new Peer();
+  peer=new Peer(undefined,ICE);
   peer.on('open',()=>{
     const conn=peer.connect(PREFIX+code,{reliable:true});wire(conn);startExpiryWatch();
-    setTimeout(()=>{if(!conns.some(x=>x.open))status('No host found for <b>'+code+'</b>. Ask them to keep their tab open, or use a Snapshot link','err')},8000);
+    setTimeout(()=>{if(!conns.some(x=>x.open))status('No host found for <b>'+code+'</b>. Ask them to keep their tab open, or use a Snapshot link','err')},20000);
   });
   peer.on('error',e=>{status(e.type==='peer-unavailable'?'No host found for <b>'+code+'</b>. Is their tab still open?':'Network error: '+e.type,'err')});
 }
@@ -260,7 +266,7 @@ $('new').onclick=()=>{ta.value='';lastSent=null;refresh();host(newCode())};
 $('join').onclick=()=>join($('code').value);
 $('code').addEventListener('keydown',e=>{if(e.key==='Enter')join(e.target.value)});
 $('code').addEventListener('paste',()=>setTimeout(()=>{if($('code').value.length>6)join($('code').value)}));
-$('share').onclick=async()=>{if(!code){toast('No code yet');return}await copyText(pageUrl(code));toast('Link copied: '+code)};
+$('share').onclick=async()=>{if(!code){toast('No code yet');return}await copyText('Sharing is Caring #'+code+'\n'+pageUrl(code));toast('Link copied: '+code)};
 
 // ---------- snapshot links (content lives in the URL, nothing hosted) ----------
 const b64=u8=>btoa(String.fromCharCode(...u8)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
