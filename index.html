@@ -117,11 +117,10 @@ let peer=null,conns=[],code='',expires=0,isHost=false,timer=null,lastSent=null,p
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),1800)};
 const newCode=()=>{const r=crypto.getRandomValues(new Uint32Array(3));return WORDS[r[0]%WORDS.length]+'-'+WORDS[r[1]%WORDS.length]+'-'+(10+r[2]%90)};
-// STUN + TURN relays (incl. TCP/TLS on 443) so cross-region / corporate-firewall peers can still connect
+// STUN + TURN relays. Keep this under 5 URLs total: more slows ICE discovery, and a dead TURN entry makes ICE fail.
 const ICE={config:{iceServers:[
- {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},
- {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},
- {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+ {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']},
+ {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}
 ],sdpSemantics:'unified-plan'}};
 const pageUrl=c=>location.origin+location.pathname+'#'+c;
 const extractCode=s=>{s=s.trim();const i=s.lastIndexOf('#');if(i>=0)s=s.slice(i+1);  // "#code", "url#code", or a pasted share message
