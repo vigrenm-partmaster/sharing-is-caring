@@ -124,8 +124,8 @@ const newCode=()=>{const r=crypto.getRandomValues(new Uint32Array(3));return WOR
 const TURN_USER='07300beaff045a5efea7c6e3', TURN_PASS='Zw+suV91lFR6Krb7';
 const ICE={config:{iceServers:[
  {urls:'stun:stun.l.google.com:19302'},
- {urls:['turn:standard.relay.metered.ca:80','turn:standard.relay.metered.ca:80?transport=tcp',
-        'turn:standard.relay.metered.ca:443','turns:standard.relay.metered.ca:443?transport=tcp'],
+ {urls:['turn:global.relay.metered.ca:80','turn:global.relay.metered.ca:80?transport=tcp',
+        'turn:global.relay.metered.ca:443','turns:global.relay.metered.ca:443?transport=tcp'],
   username:TURN_USER,credential:TURN_PASS}
 ],sdpSemantics:'unified-plan'}};
 const getIce=async()=>ICE;
