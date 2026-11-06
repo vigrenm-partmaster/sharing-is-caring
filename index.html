@@ -117,11 +117,26 @@ let peer=null,conns=[],code='',expires=0,isHost=false,timer=null,lastSent=null,p
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),1800)};
 const newCode=()=>{const r=crypto.getRandomValues(new Uint32Array(3));return WORDS[r[0]%WORDS.length]+'-'+WORDS[r[1]%WORDS.length]+'-'+(10+r[2]%90)};
-// STUN + TURN relays. Keep this under 5 URLs total: more slows ICE discovery, and a dead TURN entry makes ICE fail.
-const ICE={config:{iceServers:[
- {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']},
- {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'}
-],sdpSemantics:'unified-plan'}};
+// STUN + TURN relays. TURN (relay) is what makes it work across office firewalls, between browsers on the
+// same machine, and between colleagues behind the same router. Credentials come from Metered Open Relay
+// (free tier); if that fetch fails we fall back to STUN only, which works on friendlier networks.
+const METERED_APP='', METERED_KEY='';   // e.g. 'myapp' (from myapp.metered.live) and the API key
+const STUN=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}];
+let iceP=null;
+function getIce(){
+  if(!iceP) iceP=(async()=>{
+    let turn=[];
+    if(METERED_APP&&METERED_KEY){
+      try{
+        const ac=new AbortController();setTimeout(()=>ac.abort(),5000);
+        const r=await fetch('https://'+METERED_APP+'.metered.live/api/v1/turn/credentials?apiKey='+encodeURIComponent(METERED_KEY),{signal:ac.signal});
+        if(r.ok) turn=(await r.json()).filter(s=>!/^stun:/.test([].concat(s.urls)[0]));   // keep TURN entries; we have our own STUN
+      }catch(e){console.warn('TURN credentials unavailable, using STUN only',e)}
+    }
+    return {config:{iceServers:STUN.concat(turn),sdpSemantics:'unified-plan'}};
+  })();
+  return iceP;
+}
 const pageUrl=c=>location.origin+location.pathname+'#'+c;
 const extractCode=s=>{s=s.trim();const i=s.lastIndexOf('#');if(i>=0)s=s.slice(i+1);  // "#code", "url#code", or a pasted share message
   const m=s.match(/([a-z]+)[\s_.-]+([a-z]+)[\s_.-]+(\d{2})(?!\d)/i);  // word-word-NN, separators optional/mixed ("gold tree 57")
@@ -234,25 +249,32 @@ function send(){
 }
 $('send').onclick=send;
 
-function host(c,exp){
+// reclaim: this tab already owned the code (reload). The broker keeps the old registration alive for up to
+// ~60s, so retry the same code instead of silently switching, which would break the link already shared.
+async function host(c,exp,reclaim,tries=0){
   teardown();isHost=true;code=c;expires=exp||Date.now()+TTL;
   history.replaceState(null,'',pageUrl(code));document.title='Sharing is Caring #'+code;
-  status('Connecting…');
-  peer=new Peer(PREFIX+code,ICE);
+  status(tries?'Reclaiming code <b>'+code+'</b> after reload… ('+tries*5+'s)':'Connecting…');
+  const ice=await getIce();
+  if(code!==c||!isHost)return;   // user started something else meanwhile
+  peer=new Peer(PREFIX+code,ice);
   peer.on('open',()=>{persist();startExpiryWatch();updateStatus()});
   peer.on('connection',wire);
   peer.on('error',e=>{
-    if(e.type==='unavailable-id'){ // code taken: either another host, or stale registration
-      host(newCode());
+    if(e.type==='unavailable-id'){
+      if(reclaim&&tries<14) setTimeout(()=>{if(code===c)host(c,exp,true,tries+1)},5000);  // our own stale registration
+      else host(newCode());   // someone else really has it
     } else status('Network error: '+e.type,'err');
   });
   peer.on('disconnected',()=>{try{peer.reconnect()}catch{}});
 }
-function guest(c){
+async function guest(c){
   teardown();isHost=false;code=c;expires=Date.now()+TTL;
   history.replaceState(null,'',pageUrl(code));document.title='Sharing is Caring #'+code;
   status('Connecting to '+code+'…');
-  peer=new Peer(undefined,ICE);
+  const ice=await getIce();
+  if(code!==c||isHost)return;
+  peer=new Peer(undefined,ice);
   peer.on('open',()=>{
     const conn=peer.connect(PREFIX+code,{reliable:true});wire(conn);startExpiryWatch();
     setTimeout(()=>{if(!conns.some(x=>x.open))status('No host found for <b>'+code+'</b>. Ask them to keep their tab open, or use a Snapshot link','err')},20000);
@@ -260,7 +282,7 @@ function guest(c){
   peer.on('error',e=>{status(e.type==='peer-unavailable'?'No host found for <b>'+code+'</b>. Is their tab still open?':'Network error: '+e.type,'err')});
 }
 function join(raw){const c=extractCode(raw);if(c.length<4){toast('Enter a code or link');return}
-  const mine=readHost();if(mine&&mine.code===c)host(c,mine.expires);else guest(c)}
+  const mine=readHost();if(mine&&mine.code===c)host(c,mine.expires,true);else guest(c)}
 function readHost(){try{const h=JSON.parse(sessionStorage.getItem('sic-host')||'null');return h&&h.expires>Date.now()?h:null}catch{return null}}
 
 $('new').onclick=()=>{ta.value='';lastSent=null;refresh();host(newCode())};
@@ -300,7 +322,7 @@ refresh();
   if(typeof Peer==='undefined'){status('Could not load the peer library (offline?)','err');return}
   const c=h.length>1?extractCode(h):'';
   if(c)join(c);
-  else{const mine=readHost();host(mine?mine.code:newCode(),mine&&mine.expires)}
+  else{const mine=readHost();host(mine?mine.code:newCode(),mine&&mine.expires,!!mine)}
 })();
 window.addEventListener('hashchange',()=>{const c=extractCode(location.hash);if(c&&c!==code)join(c)});
 })();
