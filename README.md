@@ -7,6 +7,6 @@ A tiny paste-and-forget page for sharing errors, URLs, JSON and snippets between
 - Codes are three easy-to-say parts (e.g. `blue-fox-42`; typing `blue fox 42` works too). Codes and snapshots expire after 1 hour; the host tab wipes its content at expiry.
 - Types: Text, Error/stack trace, JSON (+ format), JavaScript, Markdown (+ preview: GitHub-style tables, task lists, quotes, highlighted code blocks; sanitized). White/black theme.
 
-- **Relay (TURN)** — needed across office firewalls and between browsers on one machine. Set `METERED_APP` and `METERED_KEY` in `index.html` (free Metered Open Relay account); without them it falls back to STUN only.
+- **Relay (TURN)** — needed across office firewalls and between browsers on one machine. Uses Metered free-plan TURN credentials set in `index.html` (`TURN_USER` / `TURN_PASS`).
 
 Hosting: GitHub Pages (Settings → Pages → deploy from branch, root). Single file: `index.html`.

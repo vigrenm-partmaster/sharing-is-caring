@@ -118,25 +118,17 @@ const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),1800)};
 const newCode=()=>{const r=crypto.getRandomValues(new Uint32Array(3));return WORDS[r[0]%WORDS.length]+'-'+WORDS[r[1]%WORDS.length]+'-'+(10+r[2]%90)};
 // STUN + TURN relays. TURN (relay) is what makes it work across office firewalls, between browsers on the
-// same machine, and between colleagues behind the same router. Credentials come from Metered Open Relay
-// (free tier); if that fetch fails we fall back to STUN only, which works on friendlier networks.
-const METERED_APP='', METERED_KEY='';   // e.g. 'myapp' (from myapp.metered.live) and the API key
-const STUN=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}];
-let iceP=null;
-function getIce(){
-  if(!iceP) iceP=(async()=>{
-    let turn=[];
-    if(METERED_APP&&METERED_KEY){
-      try{
-        const ac=new AbortController();setTimeout(()=>ac.abort(),5000);
-        const r=await fetch('https://'+METERED_APP+'.metered.live/api/v1/turn/credentials?apiKey='+encodeURIComponent(METERED_KEY),{signal:ac.signal});
-        if(r.ok) turn=(await r.json()).filter(s=>!/^stun:/.test([].concat(s.urls)[0]));   // keep TURN entries; we have our own STUN
-      }catch(e){console.warn('TURN credentials unavailable, using STUN only',e)}
-    }
-    return {config:{iceServers:STUN.concat(turn),sdpSemantics:'unified-plan'}};
-  })();
-  return iceP;
-}
+// same machine, and between colleagues behind the same router. Metered free plan (app "sharing",
+// credential "sharingiscaring"). These are visible in the page source; worst case someone burns the free quota.
+// Keep this to about 5 URLs: more slows ICE discovery.
+const TURN_USER='07300beaff045a5efea7c6e3', TURN_PASS='Zw+suV91lFR6Krb7';
+const ICE={config:{iceServers:[
+ {urls:'stun:stun.l.google.com:19302'},
+ {urls:['turn:standard.relay.metered.ca:80','turn:standard.relay.metered.ca:80?transport=tcp',
+        'turn:standard.relay.metered.ca:443','turns:standard.relay.metered.ca:443?transport=tcp'],
+  username:TURN_USER,credential:TURN_PASS}
+],sdpSemantics:'unified-plan'}};
+const getIce=async()=>ICE;
 const pageUrl=c=>location.origin+location.pathname+'#'+c;
 const extractCode=s=>{s=s.trim();const i=s.lastIndexOf('#');if(i>=0)s=s.slice(i+1);  // "#code", "url#code", or a pasted share message
   const m=s.match(/([a-z]+)[\s_.-]+([a-z]+)[\s_.-]+(\d{2})(?!\d)/i);  // word-word-NN, separators optional/mixed ("gold tree 57")
